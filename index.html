@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
   <meta charset="utf-8">
-  <title>みっちゃんそろばん 統合版（右寄せ・クリック操作＋音声追加・ヒント機能付き・PointerEvent対応）</title>
+  <title>みっちゃんそろばん 統合版（右寄せ・クリック操作＋音声追加・ヒント機能付き・PointerEvent対応・同時ドラッグ対応）</title>
   <style>
     /* --- 共通スタイル（1つ目をベース） --- */
     /* カスタムフォント */
@@ -123,7 +123,7 @@
       width: 396px;
       height: 242px;
       cursor: pointer;
-      touch-action: none; /* タッチ操作によるスクロールを抑制 */
+      touch-action: none; /* タッチによるブラウザのデフォルト動作を抑制 */
     }
     /* 各カラム */
     .abacus-column {
@@ -203,7 +203,6 @@
       left: 30px;
       z-index: 4;
     }
-
     /* --- ヒントカード＆ミニそろばん（2つ目のコードより） --- */
     #hint-card {
       position: fixed;
@@ -436,7 +435,6 @@
     let audioUnlocked = false;
     function unlockAudio() {
       if (!audioUnlocked) {
-        // 1回だけ音声を再生してすぐ停止する
         activeSound.play().then(() => {
           activeSound.pause();
           activeSound.currentTime = 0;
@@ -822,10 +820,10 @@
     });
     
     /***********************
-     * そろばんの玉を Pointer Events でドラッグで動かす処理
+     * そろばんの玉を複数同時に Pointer Events でドラッグできるようにする処理
      ***********************/
-    let currentDrag = null;
-    let dragOffsetY = 0;
+    // 複数のドラッグ状態を管理するオブジェクト（pointerId をキーにする）
+    const activeDrags = {};
     
     function makeBeadsDraggable() {
       const beads = document.querySelectorAll('#abacus-inner .bead');
@@ -835,48 +833,53 @@
     }
     
     function startDrag(e) {
-      // タッチ操作の場合、オーディオアンロック処理を実施
       unlockAudio();
-      currentDrag = e.target;
-      dragOffsetY = e.clientY - parseInt(currentDrag.style.top || 0);
+      const initialTop = parseInt(e.target.style.top || "0", 10);
+      activeDrags[e.pointerId] = {
+        dragElem: e.target,
+        offsetY: e.clientY - initialTop
+      };
+      // 各 pointerdown 毎に、pointermove と pointerup をリッスンする
       window.addEventListener('pointermove', onDrag);
       window.addEventListener('pointerup', stopDrag);
       e.preventDefault();
     }
     
     function onDrag(e) {
-      if (!currentDrag) return;
-      let newTop = e.clientY - dragOffsetY;
-      if (currentDrag.classList.contains('upper-bead')) {
+      const dragInfo = activeDrags[e.pointerId];
+      if (!dragInfo) return;
+      const { dragElem, offsetY } = dragInfo;
+      let newTop = e.clientY - offsetY;
+      if (dragElem.classList.contains('upper-bead')) {
         const threshold = (UPPER_DEFAULT_TOP + UPPER_ACTIVE_TOP) / 2;
         if (newTop >= threshold) {
-          if (!currentDrag.classList.contains('active')) {
+          if (!dragElem.classList.contains('active')) {
             activeSound.currentTime = 0;
             activeSound.play();
           }
-          currentDrag.classList.add('active');
-          currentDrag.style.top = UPPER_ACTIVE_TOP + 'px';
+          dragElem.classList.add('active');
+          dragElem.style.top = UPPER_ACTIVE_TOP + 'px';
         } else {
-          if (currentDrag.classList.contains('active')) {
+          if (dragElem.classList.contains('active')) {
             nonactiveSound.currentTime = 0;
             nonactiveSound.play();
           }
-          currentDrag.classList.remove('active');
-          currentDrag.style.top = UPPER_DEFAULT_TOP + 'px';
+          dragElem.classList.remove('active');
+          dragElem.style.top = UPPER_DEFAULT_TOP + 'px';
         }
-      } else if (currentDrag.classList.contains('lower-bead')) {
-        const index = parseInt(currentDrag.getAttribute('data-index'));
+      } else if (dragElem.classList.contains('lower-bead')) {
+        const index = parseInt(dragElem.getAttribute('data-index'));
         const defaultTop = LOWER_DEFAULT_TOPS[index];
         const activeTop = LOWER_ACTIVE_BASE + index * LOWER_GAP;
         const threshold = (activeTop + defaultTop) / 2;
         if (newTop < threshold) {
-          if (!currentDrag.classList.contains('active')) {
+          if (!dragElem.classList.contains('active')) {
             activeSound.currentTime = 0;
             activeSound.play();
           }
-          currentDrag.style.top = activeTop + 'px';
-          currentDrag.classList.add('active');
-          const column = currentDrag.parentElement;
+          dragElem.style.top = activeTop + 'px';
+          dragElem.classList.add('active');
+          const column = dragElem.parentElement;
           const lowerBeads = column.querySelectorAll('.lower-bead');
           lowerBeads.forEach(bead => {
             const beadIndex = parseInt(bead.getAttribute('data-index'));
@@ -886,13 +889,13 @@
             }
           });
         } else {
-          if (currentDrag.classList.contains('active')) {
+          if (dragElem.classList.contains('active')) {
             nonactiveSound.currentTime = 0;
             nonactiveSound.play();
           }
-          currentDrag.style.top = defaultTop + 'px';
-          currentDrag.classList.remove('active');
-          const column = currentDrag.parentElement;
+          dragElem.style.top = defaultTop + 'px';
+          dragElem.classList.remove('active');
+          const column = dragElem.parentElement;
           const lowerBeads = column.querySelectorAll('.lower-bead');
           lowerBeads.forEach(bead => {
             const beadIndex = parseInt(bead.getAttribute('data-index'));
@@ -906,9 +909,12 @@
     }
     
     function stopDrag(e) {
-      window.removeEventListener('pointermove', onDrag);
-      window.removeEventListener('pointerup', stopDrag);
-      currentDrag = null;
+      delete activeDrags[e.pointerId];
+      // もしドラッグ中の pointer がなくなった場合、リスナーを解除
+      if (Object.keys(activeDrags).length === 0) {
+        window.removeEventListener('pointermove', onDrag);
+        window.removeEventListener('pointerup', stopDrag);
+      }
     }
     
     /***********************
