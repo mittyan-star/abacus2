@@ -431,6 +431,25 @@
   
   <script>
     /***********************
+     * オーディオアンロック処理
+     ***********************/
+    let audioUnlocked = false;
+    function unlockAudio() {
+      if (!audioUnlocked) {
+        // 1回だけ音声を再生してすぐ停止する
+        activeSound.play().then(() => {
+          activeSound.pause();
+          activeSound.currentTime = 0;
+        }).catch(() => {});
+        nonactiveSound.play().then(() => {
+          nonactiveSound.pause();
+          nonactiveSound.currentTime = 0;
+        }).catch(() => {});
+        audioUnlocked = true;
+      }
+    }
+    
+    /***********************
      * 既存の計算式・アニメーション処理（1つ目のコードベース）
      ***********************/
     document.getElementById('expression').addEventListener('input', function() {
@@ -816,6 +835,8 @@
     }
     
     function startDrag(e) {
+      // タッチ操作の場合、オーディオアンロック処理を実施
+      unlockAudio();
       currentDrag = e.target;
       dragOffsetY = e.clientY - parseInt(currentDrag.style.top || 0);
       window.addEventListener('pointermove', onDrag);
