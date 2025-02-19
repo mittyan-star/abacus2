@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
   <meta charset="utf-8">
-  <title>みっちゃんそろばん 統合版（右寄せ・クリック操作＋音声追加・ヒント機能付き）</title>
+  <title>みっちゃんそろばん 統合版（右寄せ・クリック操作＋音声追加・ヒント機能付き・PointerEvent対応）</title>
   <style>
     /* --- 共通スタイル（1つ目をベース） --- */
     /* カスタムフォント */
@@ -802,7 +802,7 @@
     });
     
     /***********************
-     * そろばんの玉をドラッグで動かす処理
+     * そろばんの玉を Pointer Events でドラッグで動かす処理
      ***********************/
     let currentDrag = null;
     let dragOffsetY = 0;
@@ -810,15 +810,15 @@
     function makeBeadsDraggable() {
       const beads = document.querySelectorAll('#abacus-inner .bead');
       beads.forEach(bead => {
-        bead.addEventListener('mousedown', startDrag);
+        bead.addEventListener('pointerdown', startDrag);
       });
     }
     
     function startDrag(e) {
       currentDrag = e.target;
       dragOffsetY = e.clientY - parseInt(currentDrag.style.top || 0);
-      window.addEventListener('mousemove', onDrag);
-      window.addEventListener('mouseup', stopDrag);
+      window.addEventListener('pointermove', onDrag);
+      window.addEventListener('pointerup', stopDrag);
       e.preventDefault();
     }
     
@@ -884,8 +884,8 @@
     }
     
     function stopDrag(e) {
-      window.removeEventListener('mousemove', onDrag);
-      window.removeEventListener('mouseup', stopDrag);
+      window.removeEventListener('pointermove', onDrag);
+      window.removeEventListener('pointerup', stopDrag);
       currentDrag = null;
     }
     
